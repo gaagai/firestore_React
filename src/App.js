@@ -1,26 +1,74 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React, { useState, useEffect } from "react";
+import Nav from "./Nav";
+import Channel from "./Channel";
+import { firebase, db, setupPresence } from "./firebase";
+import { Redirect, Router } from "@reach/router";
 
 function App() {
-  return (
+  const user = useAuth();
+
+  return user ? (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      <Nav user={user} />
+      <Router>
+        <Channel path="channel/:channelId" user={user} />
+        <Redirect from="/" to="channel/general" />
+      </Router>
+    </div>
+  ) : (
+    <Login />
+  );
+}
+
+function Login() {
+  const [authError, setAuthError] = useState(null);
+
+  const handleSignIn = async () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      await firebase.auth().signInWithPopup(provider);
+    } catch (error) {
+      setAuthError(error);
+    }
+  };
+  return (
+    <div className="Login">
+      <h1>Chat React!</h1>
+      <button onClick={handleSignIn}>Sign in with Google</button>
+      {authError && (
+        <div>
+          <p>Sorry, there was a problem</p>
+          <p>
+            <i>{authError.message}</i>
+          </p>
+          <p>Please try again</p>
+        </div>
+      )}
     </div>
   );
 }
 
+function useAuth() {
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    return firebase.auth().onAuthStateChanged(firebaseUser => {
+      if (firebaseUser) {
+        const user = {
+          displayName: firebaseUser.displayName,
+          photoUrl: firebaseUser.photoURL,
+          uid: firebaseUser.uid
+        };
+        setUser(user);
+        db.collection("users")
+          .doc(user.uid)
+          .set(user, { merge: true });
+
+        setupPresence(user);
+      } else {
+        setUser(null);
+      }
+    });
+  }, []);
+  return user;
+}
 export default App;
